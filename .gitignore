@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+chroma_db/
+Dockerfile.mio
+# Sesión 3 — estado local de MLflow (nunca en el repo)
+mlflow.db
+mlruns/
+# Artifact exports de evaluate_rag.py
+/tmp/eval_config_*.json

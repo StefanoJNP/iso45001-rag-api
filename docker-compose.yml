@@ -1,0 +1,95 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.yml — stack completo: API + ChromaDB externo
+# Sesión 3: extendido con image override para CD desde GHCR
+#
+# Por qué esto existe:
+#   Con `docker run`, ChromaDB vive DENTRO del contenedor de la API y se
+#   pierde al reiniciar. Con Compose, ChromaDB corre como servicio separado
+#   con volumen persistente — el estado sobrevive reinicios de la API.
+#
+# Uso BÁSICO (igual que Sesión 1 — build local):
+#   export GOOGLE_API_KEY="AIza..."
+#   docker compose up -d           # build + levantar el stack
+#   docker compose logs -f         # ver logs de ambos servicios
+#   docker compose down            # parar (el volumen chroma_data sobrevive)
+#   docker compose down -v         # parar Y borrar el volumen (reset total)
+#
+# Uso CD (Sesión 3 · Bloque 3 — desplegar imagen desde GHCR):
+#   export RAG_API_IMAGE=ghcr.io/<owner>/rag-compliance-api:<sha>
+#   docker compose pull api        # baja la imagen exacta del registro
+#   docker compose up -d           # recrea el contenedor api con esa imagen
+#   docker compose images          # verifica que la imagen/SHA están corriendo
+#
+# La variable RAG_API_IMAGE cambia de "compila localmente" a "baja de GHCR"
+# sin tocar ningún otro parámetro del stack. Es el switch entre desarrollo y CD.
+#
+# Observabilidad (Sesión 3 · Bloque 6 — Prometheus + Grafana):
+#   docker compose -f docker-compose.yml -f ../observability/docker-compose.observability.yml up -d
+#   # Grafana: http://localhost:3000 · Prometheus: http://localhost:9090
+#
+# Endpoints después de `docker compose up -d`:
+#   API:    http://localhost:8000        (y /metrics para Prometheus)
+#   Chroma: http://localhost:8001        (admin UI / HTTP API)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── RAG API ────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # SESIÓN 3 — image override para CD:
+    # - Sin RAG_API_IMAGE: usa la imagen buildeada localmente (comportamiento S1).
+    # - Con RAG_API_IMAGE: docker compose pull baja la imagen de GHCR y up -d
+    #   la despliega. El SHA garantiza inmutabilidad (no hay ":latest" mutable).
+    image: ${RAG_API_IMAGE:-rag-compliance-api:compose}
+    container_name: rag-api
+    ports:
+      - "8000:8000"
+    environment:
+      # La key se lee del entorno del host — nunca va hardcodeada aquí.
+      # Exportar antes: export GOOGLE_API_KEY="AIza..."
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # Decirle a la app que use el ChromaDB externo en lugar del local
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+    depends_on:
+      chroma:
+        condition: service_healthy # espera el healthcheck de chroma
+    restart: unless-stopped
+    volumes:
+      # Montar data/ desde el host para no tener que rebuildar la imagen
+      # cuando solo cambian los documentos de ingesta.
+      - ./data:/app/data:ro # :ro = solo lectura dentro del contenedor
+
+  # ── ChromaDB ───────────────────────────────────────────────────────────────
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: rag-chroma
+    ports:
+      - "8001:8000" # accesible en localhost:8001 para debug
+    volumes:
+      # Volumen nombrado — Docker lo gestiona y persiste entre reinicios.
+      # docker compose down NO lo borra. docker compose down -v SÍ lo borra.
+      # IMPORTANTE: chromadb/chroma persiste en /data (definido en /config.yaml
+      # dentro de la imagen). El volumen debe montarse ahí, no en /chroma/chroma.
+      - chroma_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "exec 3<>/dev/tcp/localhost/8000 && echo -e 'GET /api/v2/heartbeat HTTP/1.0\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+# ── Volúmenes nombrados ────────────────────────────────────────────────────────
+volumes:
+  chroma_data:
+    # Sin driver explícito = local (carpeta gestionada por Docker Desktop).
+    # En producción se reemplazaría por un driver de cloud storage.

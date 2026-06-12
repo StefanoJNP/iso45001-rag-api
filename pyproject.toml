@@ -1,0 +1,48 @@
+[project]
+name = "rag-compliance-api"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "google-genai>=1.0.0",
+    "chromadb>=0.5.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "httpx>=0.27.0",
+    "python-multipart>=0.0.9",
+    "numpy>=1.26.0",
+    "Pillow>=10.0.0",
+    "pydantic>=2.0.0",
+    # RUNTIME — importado en app/main.py; debe estar en deps de producción.
+    # Si cae en dev-deps, uv sync --frozen en el Dockerfile no lo instala
+    # y el contenedor falla al arrancar con ImportError.
+    "prometheus-fastapi-instrumentator>=7.0.0",
+]
+
+[tool.uv]
+package = false
+dev-dependencies = [
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    # Testing
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    # Linting
+    "ruff>=0.8.0",
+    # ML experiment tracking (solo eval local, nunca en producción)
+    "mlflow>=2.14.0",
+    # Pre-commit hooks
+    "pre-commit>=3.7.0",
+    # Property-based testing — SOLO en tests, nunca en código de producción
+    "hypothesis>=6.100.0",
+    "httpx>=0.28.1",
+]
+
+[tool.ruff]
+line-length = 150
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[pytest]
+pythonpath = ["."]

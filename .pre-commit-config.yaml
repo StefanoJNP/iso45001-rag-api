@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .pre-commit-config.yaml — Sesión 3 · Guardianes locales de calidad
+#
+# Instalar los hooks (una sola vez por repo):
+#   uv run pre-commit install
+#
+# Correr sobre todos los archivos (barrido completo):
+#   uv run pre-commit run --all-files
+#
+# Los hooks corren automáticamente en cada `git commit`.
+# Si alguno falla, el commit se bloquea y debes corregir antes de re-commitear.
+#
+# Escalera de calidad:
+#   pre-commit (local, instantáneo) → CI (remoto, en cada push) → branch
+#   protection (en PR) → CD gate (post-merge). Cada capa captura lo que
+#   la anterior dejó pasar.
+# ─────────────────────────────────────────────────────────────────────────────
+
+repos:
+  # ── Higiene general ────────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace          # elimina espacios al final de línea
+      - id: end-of-file-fixer            # asegura salto de línea al final
+      - id: check-yaml                   # valida sintaxis YAML
+      - id: check-added-large-files
+        args: ['--maxkb=2000']            # bloquea archivos > 500 KB
+        # Callback Sesión 1: "modelos y datos no van al repo".
+        # Esto lo hace cumplir automáticamente.
+
+  # ── Linting y formato con ruff ─────────────────────────────────────────────
+  # ruff es el reemplazo moderno de flake8 + isort + black, 10-100× más rápido.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: [--fix]                    # corrige lo que puede automáticamente
+      - id: ruff-format                  # formatea (equivalente a black)
+
+  # ── Detección de secretos ──────────────────────────────────────────────────
+  # Callback directo de Sesión 1: "la key NUNCA en el repo".
+  # detect-secrets escanea cada cambio staged y bloquea si encuentra
+  # patrones de API keys, tokens, contraseñas, etc.
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        # Si tienes falsos positivos (ej: claves de ejemplo en tests),
+        # genera una baseline: uv run detect-secrets scan > .secrets.baseline
+        # y commitea el baseline. El hook ignorará los falsos positivos marcados.
